@@ -33,18 +33,12 @@ public:
 
    }
 
-   void updatePriceInfo(double ask, double bid) {
-      currentPrice = (PositionType() == POSITION_TYPE_BUY) ? bid : ask;
-      priceDifference = (PositionType() == POSITION_TYPE_BUY) ?
-                        (currentPrice - PriceOpen()) :
-                        (PriceOpen() - currentPrice);
-   }
-
    double getCurrentPrice() {
       return currentPrice;
    }
 
    double getPriceDifference() {
+      priceDifference = MathAbs(PriceCurrent() - PriceOpen());
       return priceDifference;
    }
 
@@ -65,6 +59,9 @@ public:
    }
 
    double getR() {
+      if (!stopLossAtBreakEven && !stopLossAtOneR){
+         R = MathAbs(PriceOpen() - StopLoss());
+      }
       return R;
    }
 
@@ -86,11 +83,6 @@ public:
 
    // Call this method on every tick
    void UpdatePositions() {
-      // Temporary container to hold currently active tickets
-      CArrayLong activeTickets;
-      activeTickets.Clear();
-      CArrayLong ticketsToDelete;
-      ticketsToDelete.Clear();
 
       // Iterate over all positions
       for(int i = 0; i < PositionsTotal(); i++) {
@@ -99,23 +91,23 @@ public:
             // If the position is new, create a PositionState for it
             addPosition(ticket);
          }
-         // Add the ticket to the active tickets list
-         activeTickets.Add(ticket);
+
       }
 
+      // Temporary container to hold currently active tickets
+      CArrayLong ticketsToDelete;
+      ticketsToDelete.Clear();
       ulong keys[];
       PositionState* values[];
       positionsMap.CopyTo(keys, values);
 
-      // Check for closed positions and delete their PositionStates
-      for(int i = 0; i < positionsMap.Count(); i++) {
+      for (int i = 0; i < ArraySize(keys); i++) {
          ulong ticket = keys[i];
-         if(activeTickets.Search(ticket) < 0) {
-            // If the ticket is not in the active tickets list, add it to the deletion list
-            ticketsToDelete.Add(ticket);
+         if (!PositionSelectByTicket(ticket)) {  // Position no longer in the market
+            ticketsToDelete.Add(ticket);  // Mark for deletion
          }
-
       }
+      
       // Delete positions that are no longer active
       for(int i = 0; i < ticketsToDelete.Total(); i++) {
          deletePosition(ticketsToDelete.At(i));
@@ -127,6 +119,7 @@ public:
       if (!positionsMap.ContainsKey(ticket)) {
          PositionState* newState = new PositionState(ticket); // Assuming the PositionState constructor takes a ticket
          positionsMap.Add(ticket, newState);
+         Print("Added position for ticket: ", ticket); // Debug print
       }
    }
 
@@ -136,6 +129,7 @@ public:
       if (positionsMap.TryGetValue(ticket, state) && state != NULL) {
          delete state;  // Free memory
          positionsMap.Remove(ticket);
+         Print("Deleted position for ticket: ", ticket);
       }
    }
 
@@ -171,3 +165,4 @@ public:
 
 //+------------------------------------------------------------------+
 
+//+------------------------------------------------------------------+

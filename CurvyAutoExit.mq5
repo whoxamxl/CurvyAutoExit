@@ -49,6 +49,9 @@ int OnInit() {
 
    //Function to initialize the values of the global variables
    initializeVariables();
+
+   // Set the timer to trigger every 1 second (1000 milliseconds)
+   EventSetTimer(1);
 //---
    return(INIT_SUCCEEDED);
 }
@@ -57,7 +60,7 @@ int OnInit() {
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason) {
 //---
-
+   EventKillTimer();
 }
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -65,6 +68,12 @@ void OnDeinit(const int reason) {
 void OnTick() {
 //---
    updateSymbolInfo();
+
+}
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void OnTimer() {
    positionManager.UpdatePositions();
    evaluateExit();
 }
@@ -171,15 +180,18 @@ void evaluateExit() {
 //|                                                                  |
 //+------------------------------------------------------------------+
 void handleExit(ulong ticket) {
+
+   if (!positionManager.contains(ticket)) {
+      Print("Error: Position state not found for ticket: ", ticket);
+      return;
+   }
+
    PositionState* state = positionManager.getPosition(ticket);
-   if(state == NULL) return; // Position not in manager
 
    if (!isValidState(state)) {
       Print("Invalid state for ticket: ", ticket);
       return;
    }
-
-   state.updatePriceInfo(Ask, Bid);
 
    // Process trailing stop if enabled
    processTrailingStop(state, ticket);
@@ -194,9 +206,12 @@ void handleExit(ulong ticket) {
 //|                                                                  |
 //+------------------------------------------------------------------+
 bool isValidState(PositionState* state) {
-   if (state.StopLoss() < 0.0) return false; // Check if stop loss is set
+   if (state.StopLoss() <= 0.0) return false; // Check if stop loss is set
    if (state.Volume() <= 0) return false;    // Check if volume is valid
-   // Add any other checks relevant to your strategy
+   if(!(state.TakeProfit() <= 0.0)) {
+      if (MathAbs(state.TakeProfit() - state.PriceOpen()) < state.getR()) return false;
+      if (state.getStopLossAtBreakEven() && MathAbs(state.TakeProfit() - state.PriceOpen()) < (1.5 * state.getR())) return false;
+   }
    return true;
 }
 
@@ -206,7 +221,7 @@ bool isValidState(PositionState* state) {
 void processTrailingStop(PositionState* state, ulong ticket) {
    //If Trailing stop enabled and price has moved by 1.5R
    if(UseTrailingStop && state.getStopLossAtBreakEven() && state.getPriceDifference() >= 1.5*state.getR()) {
-      double newStopLoss = state.getCurrentPrice() - 0.5 * ((state.PositionType() == POSITION_TYPE_BUY) ? state.getR() : -(state.getR()));
+      double newStopLoss = state.PriceCurrent() - 0.5 * ((state.PositionType() == POSITION_TYPE_BUY) ? state.getR() : -(state.getR()));
       if ((state.PositionType() == POSITION_TYPE_BUY && newStopLoss > state.StopLoss()) ||
             (state.PositionType() == POSITION_TYPE_SELL && newStopLoss < state.StopLoss())) {
          if(orders.modifyTrade(ticket, 0, newStopLoss, state.TakeProfit())) {
@@ -227,7 +242,7 @@ void processTrailingStop(PositionState* state, ulong ticket) {
 void evaluateBreakEven(PositionState* state, ulong ticket) {
    //If price has moved by 1R and SL is not yet at breakeven
    if(state.getPriceDifference() >= state.getR() && !state.getStopLossAtBreakEven()) {
-      if(orders.modifyTrade(ticket, 0, BreakEvenCommission ? adjustStopLossForCommission(ticket) : state.PriceOpen(), state.TakeProfit())) {
+      if(orders.modifyTrade(ticket, 0, BreakEvenCommission ? adjustStopLossForCommission(state, ticket) : state.PriceOpen(), state.TakeProfit())) {
          positionManager.updateStopLossAtBreakEven(ticket);
          Print("Position modified due to 1R (" + state.getOrderTypeName() + ")");
       } else {
@@ -273,9 +288,7 @@ void evaluateTimeBasedExit(PositionState* state, ulong ticket) {
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-double adjustStopLossForCommission(ulong ticket) {
-   PositionState* state = positionManager.getPosition(ticket);
-   if(state == NULL) return 0.0; // Position not in manager
+double adjustStopLossForCommission(PositionState* state, ulong ticket) {
 
    double commissionForTrade = state.Commission();
 
