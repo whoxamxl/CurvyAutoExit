@@ -7,7 +7,7 @@
 #property link      "https://www.mql5.com"
 
 #include <Trade\Trade.mqh>
-#include <errordescription.mqh>
+#include "errordescription.mqh"
 #include <Trade\OrderInfo.mqh>
 #include <Trade\PositionInfo.mqh>
 
@@ -24,7 +24,7 @@ public:
    }
    ulong executeTrade(ENUM_ORDER_TYPE cmd, double volume, double entryPrice = 0, double stopLoss = 0, double takeProfit = 0, datetime Expiration=0, double stopLimit=0) {
       if(cmd == ORDER_TYPE_BUY || cmd == ORDER_TYPE_SELL) {
-         entryPrice = cmd == ORDER_TYPE_BUY ? Ask : Bid;
+         entryPrice = cmd == ORDER_TYPE_BUY ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
       }
       bool res = false;
       ulong ticket = -1;

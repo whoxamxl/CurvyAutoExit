@@ -5,34 +5,28 @@
 //+------------------------------------------------------------------+
 #property copyright "Yuta Miura"
 #property link      "https://www.mql5.com"
-#property version   "1.00"
+#property version   "1.20"
 
 //-INCLUDES-//
 
-#include <errordescription.mqh>
-#include <PositionManagerv3.mqh>
-#include <Orders.mqh>
+#include "PositionManagerv3.mqh"
+#include "Orders.mqh"
+#include "errordescription.mqh"
 
 //-INPUT PARAMETERS-//
-input bool UseTrailingStop = false;
-input bool BreakEvenCommission = true;                               //Consider Commission when breakeven
-input int ExitTimeOut= 150;                                           //Position timeout in miniutes
+input group "CurvyAutoExit"
+input bool AutoExitActive = true;                                    // Enable or disable the auto-exit
+input bool UseTrailingStop = false;                                  // Enable trailing stop after 1.5R reached
+input bool BreakEvenCommission = true;                               // Include commission costs for the break-even
+input int ExitTimeOut= 150;                                          // Position timeout (in minutes) when 1R not reached
 
 //-CONSTANTS-//
 
 //-GLOBAL VARIABLES-//
-MqlTick tick;
-MqlRates rates;
-
 PositionManager positionManager;
 Orders orders;
 
-//Tick data
-double Ask, Bid;
-double High[];
-double Low[];
-double Open[];
-double Close[];
+
 
 //-NATIVE MT5 EXPERT ADVISOR RUNNING FUNCTIONS-//
 
@@ -46,9 +40,6 @@ int OnInit() {
       OnDeinit(INIT_FAILED);
       return(INIT_FAILED);
    }
-
-   //Function to initialize the values of the global variables
-   initializeVariables();
 
    // Set the timer to trigger every 1 second (1000 milliseconds)
    EventSetTimer(1);
@@ -67,15 +58,17 @@ void OnDeinit(const int reason) {
 //+------------------------------------------------------------------+
 void OnTick() {
 //---
-   updateSymbolInfo();
 
 }
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
 void OnTimer() {
-   positionManager.UpdatePositions();
-   evaluateExit();
+   positionManager.UpdatePositions(); // Always keep this updated
+
+   if(AutoExitActive) {
+      evaluateExit(); // Run only if AutoExitActive is true
+   }
 }
 //+------------------------------------------------------------------+
 //| Trade function                                                   |
@@ -117,46 +110,6 @@ bool checkPreChecks() {
       return false;
    }
    return true;
-}
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-void initializeVariables() {
-   ArraySetAsSeries(High, true);
-   ArraySetAsSeries(Low, true);
-   ArraySetAsSeries(Open, true);
-   ArraySetAsSeries(Close, true);
-
-   if(SymbolInfoTick(_Symbol, tick)) {
-      Ask = tick.ask;
-      Bid = tick.bid;
-   }
-   CopyHigh(_Symbol, _Period, 0, Bars(_Symbol, _Period), High);
-   CopyLow(_Symbol, _Period, 0, Bars(_Symbol, _Period), Low);
-   CopyOpen(_Symbol, _Period, 0, Bars(_Symbol, _Period), Open);
-   CopyClose(_Symbol, _Period, 0, Bars(_Symbol, _Period), Close);
-}
-
-void updateSymbolInfo() {
-
-   if(SymbolInfoTick(_Symbol, tick)) {
-      Ask = tick.ask;
-      Bid = tick.bid;
-   }
-
-   static int lastBarCount = 0;
-   int currentBarCount = Bars(_Symbol, _Period);
-
-   // Update historical data only when a new bar is added
-   if(currentBarCount != lastBarCount) {
-      CopyHigh(_Symbol, _Period, 0, Bars(_Symbol, _Period), High);
-      CopyLow(_Symbol, _Period, 0, Bars(_Symbol, _Period), Low);
-      CopyOpen(_Symbol, _Period, 0, Bars(_Symbol, _Period), Open);
-      CopyClose(_Symbol, _Period, 0, Bars(_Symbol, _Period), Close);
-      lastBarCount = currentBarCount;
-   }
-
 }
 
 //+------------------------------------------------------------------+

@@ -59,7 +59,7 @@ public:
    }
 
    double getR() {
-      if (!stopLossAtBreakEven && !stopLossAtOneR){
+      if (!stopLossAtBreakEven && !stopLossAtOneR) {
          R = MathAbs(PriceOpen() - StopLoss());
       }
       return R;
@@ -85,13 +85,17 @@ public:
    void UpdatePositions() {
 
       // Iterate over all positions
-      for(int i = 0; i < PositionsTotal(); i++) {
+      for (int i = 0; i < PositionsTotal(); i++) {
          ulong ticket = PositionGetTicket(i);
-         if(!contains(ticket)) {
-            // If the position is new, create a PositionState for it
-            addPosition(ticket);
-         }
+         string positionSymbol = PositionGetSymbol(i);
 
+         // Check if the position belongs to the current chart's symbol
+         if (positionSymbol == _Symbol) {
+            if (!contains(ticket)) {
+               // If the position is new and belongs to the current symbol, create a PositionState for it
+               addPosition(ticket);
+            }
+         }
       }
 
       // Temporary container to hold currently active tickets
@@ -107,7 +111,7 @@ public:
             ticketsToDelete.Add(ticket);  // Mark for deletion
          }
       }
-      
+
       // Delete positions that are no longer active
       for(int i = 0; i < ticketsToDelete.Total(); i++) {
          deletePosition(ticketsToDelete.At(i));
